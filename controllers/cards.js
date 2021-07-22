@@ -5,8 +5,11 @@ const NOT_FOUND_ERROR_CODE = 404;
 const COMMON_ERROR_CODE = 500;
 const NOT_FOUND_ERROR_TEXT = 'Запрашиваемая карточка не найдена';
 
-function getStatusCode(errorName) {
-  if (errorName === 'ValidationError' || errorName === 'CastError') {
+function getStatusCode(err) {
+  if (err.message === NOT_FOUND_ERROR_TEXT) {
+    return NOT_FOUND_ERROR_CODE;
+  }
+  if (err.name === 'ValidationError' || err.name === 'CastError') {
     return VALIDATION_ERROR_CODE;
   }
 
@@ -16,18 +19,16 @@ function getStatusCode(errorName) {
 module.exports.getCards = (req, res) => {
   Card.find({})
     .then((cards) => res.send({ data: cards }))
-    .catch((err) => res.status(getStatusCode(err.name)).send({ message: err.message }));
+    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
 };
 
 module.exports.deleteCard = (req, res) => {
   Card.findByIdAndRemove(req.params.id)
+    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
-      if (card === null) {
-        res.status(NOT_FOUND_ERROR_CODE).send({ message: NOT_FOUND_ERROR_TEXT });
-      }
       res.send({ data: card });
     })
-    .catch((err) => res.status(getStatusCode(err.name)).send({ message: err.message }));
+    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
 };
 
 module.exports.createCard = (req, res) => {
@@ -36,7 +37,7 @@ module.exports.createCard = (req, res) => {
 
   Card.create(card)
     .then((newCard) => res.send({ data: newCard }))
-    .catch((err) => res.status(getStatusCode(err.name)).send({ message: err.message }));
+    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
 };
 
 module.exports.likeCard = (req, res) => {
@@ -45,13 +46,11 @@ module.exports.likeCard = (req, res) => {
     { $addToSet: { likes: req.user._id } },
     { new: true },
   )
+    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
-      if (card === null) {
-        res.status(NOT_FOUND_ERROR_CODE).send({ message: NOT_FOUND_ERROR_TEXT });
-      }
       res.send({ data: card });
     })
-    .catch((err) => res.status(getStatusCode(err.name)).send({ message: err.message }));
+    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
 };
 
 module.exports.dislikeCard = (req, res) => {
@@ -60,11 +59,9 @@ module.exports.dislikeCard = (req, res) => {
     { $pull: { likes: req.user._id } },
     { new: true },
   )
+    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
-      if (card === null) {
-        res.status(NOT_FOUND_ERROR_CODE).send({ message: NOT_FOUND_ERROR_TEXT });
-      }
       res.send({ data: card });
     })
-    .catch((err) => res.status(getStatusCode(err.name)).send({ message: err.message }));
+    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
 };
