@@ -1,67 +1,60 @@
 const Card = require('../models/card');
+const NotFoundError = require('../errors/not-found-error');
+const ForbiddenError = require('../errors/forbidden-error');
 
-const VALIDATION_ERROR_CODE = 400;
-const NOT_FOUND_ERROR_CODE = 404;
-const COMMON_ERROR_CODE = 500;
 const NOT_FOUND_ERROR_TEXT = 'Запрашиваемая карточка не найдена';
 
-function getStatusCode(err) {
-  if (err.message === NOT_FOUND_ERROR_TEXT) {
-    return NOT_FOUND_ERROR_CODE;
-  }
-  if (err.name === 'ValidationError' || err.name === 'CastError') {
-    return VALIDATION_ERROR_CODE;
-  }
-
-  return COMMON_ERROR_CODE;
-}
-
-module.exports.getCards = (req, res) => {
+module.exports.getCards = (req, res, next) => {
   Card.find({})
     .then((cards) => res.send({ data: cards }))
-    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
+    .catch(next);
 };
 
-module.exports.deleteCard = (req, res) => {
-  Card.findByIdAndRemove(req.params.id)
-    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
+module.exports.deleteCard = (req, res, next) => {
+  Card.findById(req.params.id)
+    .orFail(new NotFoundError(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
-      res.send({ data: card });
+      if (card.owner === req.user._id) {
+        Card.remove(card)
+          .then((ownerCard) => res.send({ data: ownerCard }));
+      } else {
+        throw new ForbiddenError('Попытка удалить чужую карточку');
+      }
     })
-    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
+    .catch(next);
 };
 
-module.exports.createCard = (req, res) => {
+module.exports.createCard = (req, res, next) => {
   const card = req.body;
   card.owner = req.user._id;
 
   Card.create(card)
     .then((newCard) => res.send({ data: newCard }))
-    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
+    .catch(next);
 };
 
-module.exports.likeCard = (req, res) => {
+module.exports.likeCard = (req, res, next) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $addToSet: { likes: req.user._id } },
     { new: true },
   )
-    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
+    .orFail(new NotFoundError(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
       res.send({ data: card });
     })
-    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
+    .catch(next);
 };
 
-module.exports.dislikeCard = (req, res) => {
+module.exports.dislikeCard = (req, res, next) => {
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $pull: { likes: req.user._id } },
     { new: true },
   )
-    .orFail(new Error(NOT_FOUND_ERROR_TEXT))
+    .orFail(new NotFoundError(NOT_FOUND_ERROR_TEXT))
     .then((card) => {
       res.send({ data: card });
     })
-    .catch((err) => res.status(getStatusCode(err)).send({ message: err.message }));
+    .catch(next);
 };

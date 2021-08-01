@@ -2,9 +2,32 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const helmet = require('helmet');
+const { celebrate, Joi, errors } = require('celebrate');
+const {
+  login,
+  createUser,
+} = require('./controllers/users');
+const auth = require('./middlewares/auth');
+
+const VALIDATION_ERROR_CODE = 400;
+const NOT_FOUND_ERROR_CODE = 404;
+const CONFLICTING_ERROR_CODE = 409;
+const COMMON_ERROR_CODE = 500;
 
 const { PORT = 3000 } = process.env;
 const app = express();
+
+const getErrorCode = (err) => {
+  if (err.name === 'ValidationError' || err.name === 'CastError') {
+    return VALIDATION_ERROR_CODE;
+  }
+
+  if (err.name === 'MongoError' && err.code === 11000) {
+    return CONFLICTING_ERROR_CODE;
+  }
+
+  return COMMON_ERROR_CODE;
+};
 
 app.use(helmet());
 
@@ -17,19 +40,48 @@ mongoose.connect('mongodb://localhost:27017/mestodb', {
   useFindAndModify: false,
 });
 
-app.use((req, res, next) => {
-  req.user = {
-    _id: '60f5d5f881a1b03e6c2c69cf',
-  };
+app.post('/signin', celebrate({
+  body: Joi.object().keys({
+    email: Joi.string().email().required(),
+    password: Joi.string().required().min(8),
+    name: Joi.string().min(2).max(30),
+    about: Joi.string().min(2).max(30),
+    avatar: Joi.string(),
+  }).unknown(true),
+}), login);
+app.post('/signup', celebrate({
+  body: Joi.object().keys({
+    email: Joi.string().email().required(),
+    password: Joi.string().required().min(8),
+    name: Joi.string().min(2).max(30),
+    about: Joi.string().min(2).max(30),
+    avatar: Joi.string(),
+  }).unknown(true),
+}), createUser);
 
-  next();
-});
+app.use(auth);
 
 app.use('/users', require('./routes/users'));
 app.use('/cards', require('./routes/cards'));
 
 app.get('*', (req, res) => {
-  res.status(404).send({ message: 'Запрашиваемый ресурс не найден' });
+  res.status(NOT_FOUND_ERROR_CODE).send({ message: 'Запрашиваемый ресурс не найден' });
+});
+
+app.use(errors());
+
+app.use((err, req, res, next) => {
+  const { statusCode = getErrorCode(err), message } = err;
+
+  res
+    .status(statusCode)
+    .send({
+      message: statusCode === COMMON_ERROR_CODE
+        ? 'На сервере произошла ошибка'
+        : message,
+    });
+
+  next();
 });
 
 app.listen(PORT, () => {});
